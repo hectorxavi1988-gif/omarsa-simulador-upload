@@ -50,8 +50,8 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-UPLOAD_URL = "https://a3-api-upl.omarsa.com.ec/api-upload/upload/file-temp"
-VIEW_BASE = "https://a3-api-view.omarsa.com.ec/api-view/view/media-temp"
+UPLOAD_URL = "https://a1-api-upl-lb.omarsa.com.ec/api-upload/upload/file-temp"
+VIEW_BASE = "https://a1-api-view-lb.omarsa.com.ec/api-view/view/media-temp"
 PROVIDER = "OMARSA"
 CHANNEL = "informe-bi"
 

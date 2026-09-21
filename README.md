@@ -37,7 +37,7 @@ Respuesta 200:
     "statusCode": 200,
     "message": "OK",
     "data": { "name": "<uuid>.png", "mimetype": "image/png", "file_code": null },
-    "mediaUrl": "https://a3-api-view.omarsa.com.ec/api-view/view/media-temp/<uuid>.png"
+    "mediaUrl": "https://a1-api-view-lb.omarsa.com.ec/api-view/view/media-temp/<uuid>.png"
   }
 ```
 
@@ -72,6 +72,38 @@ El servicio ya está creado: `omarsa-simulador-upload`, desplegado desde el repo
 Configuración: runtime `python`, build `echo sin dependencias` (el script usa solo librería estándar), start `python app.py`, variable de entorno `SIM_TOKEN`, plan `free`.
 
 Un detalle del plan gratuito: el servicio se duerme tras un rato sin uso y la primera petición puede tardar hasta un minuto en despertarlo. Para que eso no haga fallar la automatización de Qlik, conviene subir el *timeout* del bloque Call URL a 120-180 segundos.
+
+## Correrlo con Docker (para infraestructura)
+
+El repositorio incluye un `Dockerfile` para que infraestructura pueda construir y correr este mismo servicio donde le convenga (su propio Kubernetes, ECS, un VPS, etc.), sin depender de Render. `app.py` no tiene dependencias externas (solo librería estándar de Python), así que la imagen es mínima: no hay build de paquetes, solo se copia el archivo.
+
+Construir la imagen:
+
+```bash
+docker build -t omarsa-simulador-upload .
+```
+
+Correrla:
+
+```bash
+docker run -d --name omarsa-simulador-upload \
+  -p 10000:10000 \
+  -e SIM_TOKEN="<token compartido>" \
+  omarsa-simulador-upload
+```
+
+`SIM_TOKEN` es la única variable de entorno obligatoria (ver "Contrato" más arriba); **no va incluida en la imagen**, se inyecta en tiempo de ejecución, igual que en Render. `PORT` es opcional (por defecto 10000); si el orquestador de infraestructura asigna el puerto de otra forma, basta con pasar `-e PORT=<puerto>` y publicar ese puerto.
+
+La imagen corre como usuario sin privilegios (no root) y trae un `HEALTHCHECK` contra `GET /health`.
+
+**Importante para quien la despliegue:** el contenedor necesita salida a internet hacia `*.qlikcloud.com` (para descargar el archivo desde temp-contents) y hacia `a1-api-upl-lb.omarsa.com.ec` / `a1-api-view-lb.omarsa.com.ec` (para subirlo). Si infraestructura la corre detrás de un proxy saliente corporativo, hay que confirmar que esos dominios estén permitidos.
+
+Para probarla en local con el `docker-compose.yml` incluido:
+
+```bash
+SIM_TOKEN="loquesea" docker compose up --build
+curl http://localhost:10000/health
+```
 
 ## Probarlo
 

@@ -5,18 +5,24 @@ SIMULADOR del endpoint que se le pediria a infraestructura de Omarsa.
 
 Que hace
 --------
-POST /render-and-upload  (el que se usa)
-    Recibe en JSON la DESCRIPCION de una imagen de Qlik Cloud (tenant, app,
-    objeto, tamano, filtros), la genera con la Reports API de Qlik, la sube a
-    api-upload/upload/file-temp con multipart/form-data y devuelve el mismo
-    {"data": {"name": "..."}} de ese endpoint, mas "mediaUrl" ya armado.
-    Sirve para cualquier app y cualquier objeto/hoja PUBLICADA de cualquier
-    tenant *.qlikcloud.com.
+POST /upload-from-url  (la que usa hoy la automatizacion de Qlik)
+    Recibe la URL de un archivo en temp-contents de Qlik mas una API key de
+    Qlik, lo descarga, lo sube a api-upload/upload/file-temp con
+    multipart/form-data y devuelve el mismo {"data": {"name": "..."}} de ese
+    endpoint, mas "mediaUrl" ya armado.
+    CONFIRMADO (2026-09-21) que funciona: un archivo subido por la conexion
+    del conector a temp-contents SI se puede leer despues con una API key
+    normal del mismo usuario, mientras la key este vigente. El 404 que se
+    vio antes era por una key vencida, no por una restriccion de identidad.
 
-POST /upload-from-url    (se conserva, pero NO sirve con Qlik Automate)
-    Descarga una URL y la sube. Se probo que los archivos que sube una
-    automatizacion a temp-contents solo los puede leer la identidad que los
-    subio, asi que un servicio externo recibe 404. Queda solo para otros usos.
+POST /render-and-upload  (alternativa, para cuando se necesite flexibilidad)
+    Recibe en JSON la DESCRIPCION de una imagen de Qlik Cloud (tenant, app,
+    objeto, tamano, filtros) en vez de una URL, la genera ella misma con la
+    Reports API de Qlik, y sube el resultado igual que la ruta de arriba.
+    Sirve para cualquier app y cualquier objeto/hoja PUBLICADA de cualquier
+    tenant *.qlikcloud.com, sin que la automatizacion tenga que subir nada a
+    temp-contents primero. Hoy no la usa la automatizacion en produccion,
+    pero queda lista por si se necesita pedir imagenes de otras apps.
 
 GET /health  -> {"ok": true}
 

@@ -50,8 +50,23 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-UPLOAD_URL = "https://a1-api-upl-lb.omarsa.com.ec/api-upload/upload/file-temp"
-VIEW_BASE = "https://a1-api-view-lb.omarsa.com.ec/api-view/view/media-temp"
+# Dos ambientes disponibles, elegidos por peticion con el campo "ambiente"
+# ("produccion" o "test"; cualquier otro valor o ausencia cae en "produccion").
+# Esto permite, mientras infraestructura habilita el acceso externo a
+# a1-api-gw-ext-lb (ver README), que Qlik siga probando el flujo completo
+# contra el ambiente de test (a3) sin tener que tocar este servicio: el
+# ambiente lo decide la automatizacion de Qlik, via la variable vAmbiente,
+# y aqui solo se lee lo que mande.
+ENDPOINTS = {
+    "produccion": {
+        "upload": "https://a1-api-upl-lb.omarsa.com.ec/api-upload/upload/file-temp",
+        "view": "https://a1-api-view-lb.omarsa.com.ec/api-view/view/media-temp",
+    },
+    "test": {
+        "upload": "https://a3-api-upl.omarsa.com.ec/api-upload/upload/file-temp",
+        "view": "https://a3-api-view.omarsa.com.ec/api-view/view/media-temp",
+    },
+}
 PROVIDER = "OMARSA"
 CHANNEL = "informe-bi"
 
@@ -145,25 +160,27 @@ def dominio_descarga_permitido(url):
     return any(host == d.lstrip(".") or host.endswith(d) for d in DOMINIOS_DESCARGA)
 
 
-def subir_a_omarsa(contenido, nombre, mime, gw_key):
+def subir_a_omarsa(contenido, nombre, mime, gw_key, ambiente):
     """Sube un archivo ya descargado al almacenamiento temporal de Omarsa
     (file-temp) y arma el mediaUrl publico a partir del nombre que devuelve.
-    Es el paso final, comun a cualquier origen del archivo."""
+    Es el paso final, comun a cualquier origen del archivo. 'ambiente'
+    ('produccion' o 'test') decide contra que endpoints de Omarsa se sube."""
+    endpoints = ENDPOINTS.get(ambiente, ENDPOINTS["produccion"])
     cuerpo, content_type = multipart(
         {"json_data": json.dumps({"path": ""})},
         {"file": (nombre, contenido, mime)},
     )
-    st, _, body = http(UPLOAD_URL, "POST", cuerpo, {
+    st, _, body = http(endpoints["upload"], "POST", cuerpo, {
         "x-provider": PROVIDER, "x-channel": CHANNEL, "x-api-key": gw_key,
         "Content-Type": content_type}, timeout=180)
     parsed = a_json(body)
     if st not in (200, 201) or not parsed or not (parsed.get("data") or {}).get("name"):
-        log("fallo la subida: HTTP %s %s" % (st, body[:300]))
+        log("fallo la subida (%s): HTTP %s %s" % (ambiente, st, body[:300]))
         raise ErrorEtapa("subida", "la subida a Omarsa fallo (HTTP %s)" % st, recortar(body))
     name = parsed["data"]["name"]
-    log("subida OK: %s" % name)
+    log("subida OK (%s): %s" % (ambiente, name))
     salida = dict(parsed)
-    salida["mediaUrl"] = "%s/%s" % (VIEW_BASE, name)
+    salida["mediaUrl"] = "%s/%s" % (endpoints["view"], name)
     return salida
 
 
@@ -262,6 +279,9 @@ class Handler(BaseHTTPRequestHandler):
         url = (datos.get("url") or "").strip()
         filename = re.sub(r"[^A-Za-z0-9._-]", "_",
                           (datos.get("filename") or "").strip() or "imagen.png")[:120]
+        ambiente = (datos.get("ambiente") or "produccion").strip().lower()
+        if ambiente not in ENDPOINTS:
+            ambiente = "produccion"
         if not url.lower().startswith("https://"):
             raise ErrorPeticion("'url' falta o no es https")
         if not dominio_descarga_permitido(url):
@@ -279,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
         mime = rh.get("Content-Type", "application/octet-stream")
         if mime.startswith("application/octet-stream") and filename.lower().endswith(".png"):
             mime = "image/png"
-        return self._responder(200, subir_a_omarsa(contenido, filename, mime, gw_key))
+        return self._responder(200, subir_a_omarsa(contenido, filename, mime, gw_key, ambiente))
 
 
 def main():

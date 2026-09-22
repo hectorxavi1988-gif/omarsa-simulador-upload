@@ -29,7 +29,8 @@ Body:
   {
     "url": "https://<tenant>.qlikcloud.com/api/v1/temp-contents/<id>",
     "authorization": "Bearer <api key de Qlik>",
-    "filename": "tablero.png"
+    "filename": "tablero.png",
+    "ambiente": "produccion"   # opcional, ver mas abajo
   }
 
 Respuesta 200:
@@ -42,6 +43,17 @@ Respuesta 200:
 ```
 
 La respuesta es la misma de `file-temp` más un campo `mediaUrl` ya armado, para que la automatización de Qlik no tenga que concatenar nada.
+
+### Campo `ambiente` (produccion / test)
+
+Desde el 22-sep-2026 el simulador acepta un campo opcional `ambiente` en el body, con dos valores posibles: `"produccion"` (endpoints `a1-api-upl-lb` / `a1-api-view-lb`) o `"test"` (endpoints `a3-api-upl` / `a3-api-view`). Si se omite, o viene con un valor distinto a esos dos, se usa `"produccion"` por defecto.
+
+Esto existe porque, al 22-sep-2026, `a1-api-gw-ext-lb` (el gateway de producción) devuelve `403 Forbidden - Request forbidden by administrative rules` para peticiones externas — algo distinto a un 403 de la aplicación, parece un firewall/WAF que aún no tiene permitido el tráfico externo (`a1-api-upl-lb` y `a1-api-view-lb` sí responden bien; ver "Qué pedirle a infraestructura" más abajo). Mientras tanto, la automatización de Qlik puede seguir probando el flujo completo contra el ambiente de test (`a3`), que sigue funcionando de punta a punta. El cambio de ambiente se controla desde una sola variable en la automatización de Qlik (`vAmbiente`), que:
+
+- decide la URL y el código que usa el bloque `generarKey` (gateway de `a1` o de `a3`), y
+- se la pasa a este servicio en el campo `ambiente`, para que suba/arme la URL de vista contra el mismo ambiente que generó la key.
+
+No hace falta ninguna variable de entorno ni redeploy para cambiar de ambiente: basta con editar el valor de `vAmbiente` en la automatización (`produccion` o `test`).
 
 También responde `GET /health` con `{"ok": true}`.
 

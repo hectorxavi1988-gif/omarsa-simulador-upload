@@ -170,9 +170,16 @@ def subir_a_omarsa(contenido, nombre, mime, gw_key, ambiente):
         {"json_data": json.dumps({"path": ""})},
         {"file": (nombre, contenido, mime)},
     )
-    st, _, body = http(endpoints["upload"], "POST", cuerpo, {
-        "x-provider": PROVIDER, "x-channel": CHANNEL, "x-api-key": gw_key,
-        "Content-Type": content_type}, timeout=180)
+    try:
+        st, _, body = http(endpoints["upload"], "POST", cuerpo, {
+            "x-provider": PROVIDER, "x-channel": CHANNEL, "x-api-key": gw_key,
+            "Content-Type": content_type}, timeout=180)
+    except OSError as e:
+        # Fallo de red (DNS, conexion rechazada, timeout, etc), no un codigo
+        # HTTP de error: http() no lo atrapa, asi que se traduce aqui a la
+        # misma etapa "subida" en vez de dejarlo caer como error 500 generico.
+        log("fallo de red al subir (%s): %s" % (ambiente, e))
+        raise ErrorEtapa("subida", "no se pudo conectar con Omarsa para subir el archivo: %s" % e)
     parsed = a_json(body)
     if st not in (200, 201) or not parsed or not (parsed.get("data") or {}).get("name"):
         log("fallo la subida (%s): HTTP %s %s" % (ambiente, st, body[:300]))
@@ -290,7 +297,14 @@ class Handler(BaseHTTPRequestHandler):
         headers = {}
         if datos.get("authorization"):
             headers["Authorization"] = datos["authorization"].strip()
-        st, rh, contenido = http(url, "GET", None, headers)
+        try:
+            st, rh, contenido = http(url, "GET", None, headers)
+        except OSError as e:
+            # Mismo caso que en subir_a_omarsa: fallo de red (no HTTP) al
+            # descargar de Qlik, traducido a la etapa "descarga" en vez de
+            # un error 500 generico sin clasificar.
+            log("fallo de red al descargar: %s" % e)
+            raise ErrorEtapa("descarga", "no se pudo conectar para descargar el archivo: %s" % e)
         if st != 200:
             raise ErrorEtapa("descarga", "no se pudo descargar el archivo (HTTP %s)" % st,
                              recortar(contenido))
